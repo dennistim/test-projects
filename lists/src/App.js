@@ -1,143 +1,147 @@
 import React, {useState} from 'react';
+import './App.css';
 import { v1 as uid } from 'uuid';
 import ListItem from './components/ListItem';
+import Button from './components/Button';
+import Container from './components/Container';
 
 function App() {
-    const [list, setList] = useState([
-        {
-            id: 1,
-            title: '1',
-            subList: [
-                {
-                    id: 99,
-                    title: '1 - 1',
-                    parentId: 1,
-                    subList: [
-                        {
-                            id: 100,
-                            title: '1 - 1 - 1',
-                            parentId: 99,
-                            subList: []
-                        },
-                        {
-                            id: 101,
-                            title: '1 - 1 - 2',
-                            parentId: 99,
-                            subList: [
-                                {
-                                    id: 120,
-                                    title: '1 - 1 - 2 - 1',
-                                    parentId: 101,
-                                    subList: []
-                                }
-                            ]
-                        }
-                    ]
-                },
-                {
-                    id: 88,
-                    title: '1 - 2',
-                    parentId: 1,
-                    subList: []
-                }
-            ],
-        },
-        {
-            id: 2,
-            title: '2',
-            subList: [],
-        },
-        ]
-    );
+    const [name, setName] = useState('');
+    const [list, setList] = useState([]);
 
-    const updateNested = (nodes, id, parentId) => {
-        return nodes.map((node) => {
-            if (node.id === parentId) {
-                const itemToUpdateIndex = node.subList.findIndex(item => item.id === id);
-                const updatedSubList = arrayMove([...node.subList], itemToUpdateIndex, itemToUpdateIndex - 1);
+    const handleOnChange = (e) => setName(e.target.value);
+
+    const changeElementOrder = (array, id, moveTo = 'up') => {
+        const fromIndex = array.findIndex(item => item.id === id);
+        const toIndex = moveTo === 'up' ? fromIndex - 1 : moveTo === 'down' ? fromIndex + 1 : 1;
+        return changeElementIndexInArray([...array], fromIndex, toIndex);
+    };
+
+    const changeElementOrderInNestedList = (array, id, parentId, moveTo = 'up') => (
+        array.map((item) => {
+            if (item.id === parentId) {
+                const updatedSubList = changeElementOrder(item.subList, id, moveTo);
 
                 return {
-                    ...node,
+                    ...item,
                     subList: updatedSubList
                 }
             }
-            else return {
-                ...node,
-                ...(node.subList && {subList: updateNested (node.subList, id, parentId)})
+            return {
+                ...item,
+                ...(item.subList && {subList: changeElementOrderInNestedList(item.subList, id, parentId, moveTo)})
             }
         })
-    }
+    )
 
-    function arrayMove(arr, fromIndex, toIndex) {
+    const addElementToSubList = (array, clickedId, newItem) => (
+        array.map((item) => {
+            if (item.id === clickedId) {
+                return {
+                    ...item,
+                    subList: [
+                        ...item.subList,
+                        newItem
+                    ]
+                }
+            }
+            return {
+                ...item,
+                ...(item.subList && {subList: addElementToSubList(item.subList, clickedId, newItem)})
+            }
+        })
+    )
+
+    const changeElementIndexInArray = (arr, fromIndex, toIndex) => {
         const element = arr[fromIndex];
         arr.splice(fromIndex, 1);
         arr.splice(toIndex, 0, element);
         return arr;
     }
 
-    const onUp = (id, parentId) => {
-        if (!parentId) {
-            const itemToUpdateIndex = list.findIndex(item => item.id === id);
-            const updatedList = arrayMove([...list], itemToUpdateIndex, itemToUpdateIndex - 1);
-            setList(updatedList);
-        } else {
-            const updatedList = updateNested(list, id, parentId);
-            setList(updatedList);
-        }
+    const deleteElementFromList = (array, id, parentId) => (
+        array.map((item) => {
+            if (item.id === parentId) {
+                const updatedSubList = item.subList.filter(listItem => listItem.id !== id);
+                return {
+                    ...item,
+                    subList: updatedSubList
+                }
+            }
+            return {
+                ...item,
+                ...(item.subList && {subList: deleteElementFromList(item.subList, id, parentId)})
+            }
+        })
+    )
+
+    const handleChangeOrder = (id, parentId, moveTo) => {
+        let updatedList;
+        if (!parentId) updatedList = changeElementOrder(list, id, moveTo);
+        else updatedList = changeElementOrderInNestedList(list, id, parentId, moveTo);
+        setList(updatedList);
     }
 
-    const onDown = (id, parentId) => {
-        if (!parentId) {
-            const itemToUpdateIndex = list.findIndex(item => item.id === id);
-            const updatedList = arrayMove([...list], itemToUpdateIndex, itemToUpdateIndex + 1 );
-            setList(updatedList);
-        } else {
-            const updatedList = updateNested(list, id, parentId);
-            setList(updatedList);
-        }
-    }
+    const onAdd = (clickedId, parentId, title, isTopLevel) => {
+        if (!title) return;
 
-    const onAdd = (parentId, textItem) => {
-        const newItem = {
+        const newList = {
             id: uid(),
-            parentId: parentId,
-            title: textItem,
-            sublist: [],
+            parentId: clickedId ? clickedId : null,
+            title: title,
+            subList: [],
         };
-        const parentList = list.find(item => item.id === parentId);
-        console.log(parentList);
 
+        if (isTopLevel) {
+            setName('');
+            setList([
+                ...list,
+                newList
+            ])
+            return;
+        }
+
+        const updatedList = addElementToSubList(list, clickedId, newList);
+        setList(updatedList);
     }
 
-    const onDelete = () => {
-
+    const onDelete = (id, parentId) => {
+        let updatedList;
+        if (!parentId) updatedList = list.filter(listItem => listItem.id !== id)
+        else updatedList = deleteElementFromList(list, id, parentId);
+        setList(updatedList);
     }
 
-
-
-    const getListItem = (listItem, isParent = false) => (
+    const getListItem = (listItem, disableDown, disabledUp) => (
         <ListItem
             key={listItem.id}
             listItem={listItem}
             getListItem={getListItem}
-            isParent={isParent}
-            onUp={onUp}
-            onDown={onDown}
             onAdd={onAdd}
+            onChangeOrder={handleChangeOrder}
             onDelete={onDelete}
+            disableDown={disableDown}
+            disabledUp={disabledUp}
         />
     )
 
     return (
-        <>
+
+        <Container>
             <ul>
-                {list.map((listItem, i) => (
-                    getListItem(listItem, true)
+                {list.map((listItem, index) => (
+                    getListItem(
+                        listItem,
+                        index === list.length - 1,
+                        index === 0
+                    )
                 ))}
             </ul>
-            <input type="text" placeholder="New list"/>
-            <button>ADD NEW LIST</button>
-        </>
+            <div>
+                <input value={name} onChange={handleOnChange} type="text" placeholder="New list"/>
+                <Button onClick={() => onAdd(null, null, name, true)} type="primary">Add</Button>
+            </div>
+        </Container>
     )
 }
 
